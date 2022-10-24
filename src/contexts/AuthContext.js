@@ -21,12 +21,17 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(user => {
-      setCurrentUser(user)
+      if (user) {
+        setCurrentUser(user)
 
-      user.getIdToken(true)
-        .then((token) => {
-          setToken(token)
-        })
+        user.getIdToken(true)
+          .then((token) => {
+            setToken(token)
+          })
+
+      } else {
+        setCurrentUser(false)
+      }
     })
 
     return unsub

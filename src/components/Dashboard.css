@@ -10,8 +10,8 @@
   grid-template-rows: 1fr 5fr 1fr;
   grid-template-areas:
     "sks sks sks sks"
-    ".  plt plt  ."
-    ".  pnl pnl  ."
+    "plt plt plt plt"
+    "pnl pnl pnl pnl"
   ;
 }
 
@@ -19,30 +19,29 @@
   grid-area: plt;
   display: flex;
   flex-direction: row;
+  background-color: rgba(0, 0, 0, 0.5);
 }
 
 .infoPannel {
   grid-area: pnl;
+  background-color: rgba(0, 0, 0, 0.5);
 }
 
 .stocks {
   grid-area: sks;
   display: inline-flex;
-  background: linear-gradient(90deg, #ec3c3c, #78ef7c);
 }
 
 .hide {
   width: 100%;
   display: flex;
   justify-content: end;
-  background: var(--dark-black);
 }
 
 .symbol, .newSymbol {
   display: flex;
   font-size: var(--space-xs);
   align-items: center;
-  background: rgba(0,0,0,0.15);
   padding: var(--space-xs) var(--space-m-l);
   user-select: none;
 }

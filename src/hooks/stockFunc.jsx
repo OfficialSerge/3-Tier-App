@@ -6,7 +6,7 @@ export const useStockFunc = (stockBook, SP500, annualTargetReturn, annualRFR) =>
    */
   function buildPortfolio(timeseries, plotData) {
     const numStocks = timeseries.length - 1
-    
+
     // clear any and all prior history before adding new data
     for (const [key, data] of Object.entries(stockBook)) {
       delete stockBook[key]
@@ -72,7 +72,7 @@ export const useStockFunc = (stockBook, SP500, annualTargetReturn, annualRFR) =>
     const initial = stock.values[stock.values.length - 1]['close']
     const compoundAnnual = stock.values.length / 252
 
-    return (final / initial) ** (1 / compoundAnnual) - 1
+    return (final / initial) ** (252 / stock.values.length) - 1
   }
 
   /**
@@ -98,16 +98,10 @@ export const useStockFunc = (stockBook, SP500, annualTargetReturn, annualRFR) =>
  * @return {float} the downside beta of the given stock when contrasted to the S&P 500
  */
   function downSideBeta(arr, sp500) {
-    const ave1 = mean(arr), ave2 = mean(sp500)
-    let sum = 0, sumMarket = 0
+    const downCov = downSideCov(arr, sp500)
+    const downVar = downSideVar(sp500, sp500)
 
-    for (const i in arr) {
-      if (arr[i] > 0 || sp500[i] > 0) continue
-
-      sum += (arr[i] - ave1) * (sp500[i] - ave2)
-      sumMarket += (sp500[i] - ave2) ** 2
-    }
-    return sum / sumMarket
+    return downCov / downVar
   }
 
   /**
@@ -142,19 +136,43 @@ export const useStockFunc = (stockBook, SP500, annualTargetReturn, annualRFR) =>
   }
 
   /**
-   * @param {array<float>} arr an array consisting of daily log returns
-   * @param {float} ave the mean of log returns for given timeseries arr
-   * @return {float} the skew of the distribution for the given timeseries
-   */
-  function skew(arr, ave) {
+  * @param {array<float>} arr an array consisting of daily log returns
+  * @param {array<float>} sp500 an array consisting of daily log returns
+  * @return {float} the daily, stardard deviation for given timeseries
+  */
+  function downSideCov(arr, sp500) {
+    const ave = mean(arr), marketAve = mean(sp500)
     let sum = 0, length = 0
 
-    for (const daily of arr) {
-      sum += (daily - ave) ** 3
+    for (const i in arr) {
+      // only for negative values
+      if (sp500[i] > marketAve) continue
+
+      sum += (arr[i] - ave) * (sp500[i] - marketAve)
       length++
     }
 
-    return (sum / ((length - 1) * standardDev(arr, ave) ** 3))
+    return (sum / (length - 1))
+  }
+
+  /**
+   * @param {array<float>} arr an array consisting of daily log returns
+   * @param {array<float>} sp500 an array consisting of daily log returns
+   * @return {float} the downside variance of arr 
+   */
+  function downSideVar(arr, sp500) {
+    const ave = mean(arr), marketAve = mean(sp500)
+    let sum = 0, length = 0
+
+    for (const i in arr) {
+      // only for negative values
+      if (sp500[i] > marketAve) continue
+
+      sum += (arr[i] - ave) ** 2
+      length++
+    }
+
+    return (sum / (length - 1))
   }
 
   /**
@@ -175,14 +193,12 @@ export const useStockFunc = (stockBook, SP500, annualTargetReturn, annualRFR) =>
       const his = historicReturns(stock)
       const ave = mean(logValues)
       const std = standardDev(logValues, ave) * (252 ** 0.5)
-      const skw = skew(logValues, ave)
       const bta = beta(logValues, stockBook['SPX']['dailyLogReturns'])
       const downbta = downSideBeta(logValues, stockBook['SPX']['dailyLogReturns'])
 
       // tally the metrics for each stock
       stockBook[stock.meta.symbol]['annualHistRet'] = his
       stockBook[stock.meta.symbol]['annualStDev'] = std
-      stockBook[stock.meta.symbol]['skew'] = skw
       stockBook[stock.meta.symbol]['annualBeta'] = bta
       stockBook[stock.meta.symbol]['annualDBeta'] = downbta
       stockBook[stock.meta.symbol]['expAnnualRetCAPM'] = annualRFR + bta * (stockBook['SPX']['annualHistRet'] - annualRFR)
@@ -254,5 +270,15 @@ export const useStockFunc = (stockBook, SP500, annualTargetReturn, annualRFR) =>
     return [histAnnualSTD, historicDownsideVol, historicDownsideVar, historicUpsideVar, annualWeightedReturn]
   }
 
-  return [buildPortfolio]
+  return [
+    buildPortfolio,
+    dailyLogReturns,
+    historicReturns,
+    beta,
+    downSideBeta,
+    mean,
+    standardDev,
+    downSideVar,
+    downSideCov
+  ]
 }

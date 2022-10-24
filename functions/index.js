@@ -24,7 +24,7 @@ app.use(validateFirebaseIdToken)
 async function getStockData(params) {
   const { symbol, outputsize } = params
 
-  const stockDocRef = doc(db, symbol, outputsize)
+  const stockDocRef = doc(db, "annual data", symbol)
 
   try {
     const stockSnap = await getDoc(stockDocRef)

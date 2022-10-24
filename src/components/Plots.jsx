@@ -1,5 +1,3 @@
-import './Plots.css'
-
 import Plot from 'react-plotly.js'
 
 import { useState } from 'react'
@@ -9,7 +7,7 @@ const COLORS = [
   '#36949d', '#1982c4', '#4267ac', '#565aa0', '#6a4c93'
 ]
 
-export const Plots = ({ stockBook, loading, plotData }) => {
+export const Plots = ({ stockBook, response, plotData }) => {
   const [selectedPort, setPort] = useState(null)
 
   function handleClick(data) {
@@ -24,7 +22,7 @@ export const Plots = ({ stockBook, loading, plotData }) => {
   }
 
   return (
-    <Plot
+    plotData[0] && <Plot
       className='plot'
       onClick={(data) => handleClick(data)}
       data={[
@@ -128,9 +126,9 @@ export const Plots = ({ stockBook, loading, plotData }) => {
           dtick: 0.1
         },
         margin: {
-          pad: 10,
-          l: 100,
-          r: 100,
+          pad: 15,
+          l: 150,
+          r: 150,
           b: 75,
           t: 75
         },

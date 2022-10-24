@@ -104,7 +104,7 @@ export const Dashboard = () => {
       <Plots
         stockBook={stockBook}
         plotData={plotData}
-        loading={loading}
+        response={response}
       />
       <div className="infoPannel">
         <p><Link style={{ 'color': 'var(--grey)' }} onClick={(event) => handleLogout(event)}>Log Out</Link></p>
