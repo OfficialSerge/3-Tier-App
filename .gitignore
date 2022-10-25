@@ -8,9 +8,6 @@
 # testing
 /coverage
 
-# production
-/build
-
 # functions
 **/.runtimeconfig.json
 /functions/firebase.js
