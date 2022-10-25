@@ -14,8 +14,8 @@ jobs:
         run: npm test
 
       - name: build app
-        uses: actions/checkout@v2
-        run: npm run build
+      - uses: actions/checkout@v2
+      - run: npm run build
         
       - name: deploy app
         uses: FirebaseExtended/action-hosting-deploy@v0
