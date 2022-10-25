@@ -1,0 +1,1 @@
+A three tier, portfolio optimizing utility, combining a React rendered frontend with a Google Cloud Functions, Express middleware, written using Node.js. Authenticated users may fetch unique JSON data from a REST endpoint and persist their information in a NoSQL database to be accessed later. 
