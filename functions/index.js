@@ -2,7 +2,7 @@ import admin from 'firebase-admin'
 import functions from 'firebase-functions'
 
 import { db } from './firebase.js'
-import { connectFirestoreEmulator, doc, getDoc, setDoc } from "firebase/firestore"
+import { connectFirestoreEmulator, doc, getDoc, setDoc, Timestamp } from "firebase/firestore"
 
 import { validateFirebaseIdToken } from './authMiddleware.js'
 
@@ -34,7 +34,13 @@ async function getStockData(params) {
       const { data } = await axios({
         params
       })
-      setDoc(stockDocRef, data)
+
+      const expDate = new Date(Date.now() + 1000 * 60 * 60 * 24)
+
+      setDoc(stockDocRef, {
+        data,
+        timestamp: Timestamp.fromDate(expDate)
+      })
       return data
     }
     functions.logger.log('DATABASE HIT')
