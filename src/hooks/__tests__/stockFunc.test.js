@@ -10,7 +10,9 @@ afterAll(() => {
 describe('unit testing useStockFunc', () => {
   const { result } = renderHook(() => useStockFunc())
   const [
-    buildPortfolio,
+    stock_data_ignore, // not for testing
+    plot_data_ignore,  // not for testing
+
     dailyLogReturns,
     historicReturns,
     beta,
@@ -18,6 +20,7 @@ describe('unit testing useStockFunc', () => {
     mean,
     standardDev
   ] = result.current
+
 
   test('test mean function with positive input', () => {
     const input = [1.0, 2.0, 3.0, 4.0, 5.0]
@@ -64,7 +67,7 @@ describe('unit testing useStockFunc', () => {
   })
   test('test historicReturns function', () => {
     const input = historicReturns(JPM_TEST)
-    const output = 2.893376003
+    const output = 0.119937
 
     expect(input).toBeCloseTo(output)
   })

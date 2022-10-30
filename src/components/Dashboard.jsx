@@ -14,13 +14,10 @@ export const Dashboard = () => {
   const [ticks, setTicks] = useState(['KO', 'JPM', 'DIS', 'WMT', 'MSFT', 'PFE', 'CAT'])
   const [annualTargetReturn, setTarget] = useState(0.10)
   const [annualRFR, setRFR] = useState(0.0417)
-  const [stockBook, setStockBook] = useState({})
-  const [plotData, setPlot] = useState({})
-  const [SP500, setSP] = useState({})
   const newStock = useRef()
 
-  const [response, stockDataErr, loading, axiosFetch] = useAxiosFunc()
-  const [buildPortfolio] = useStockFunc(stockBook, SP500, annualTargetReturn, annualRFR)
+  const [response, stockLoadingErr, loading, axiosFetch] = useAxiosFunc()
+  const [stockBook, plotData] = useStockFunc(response, annualTargetReturn, annualRFR)
 
   const { currentUser, userToken, logout } = useAuth()
 
@@ -80,8 +77,7 @@ export const Dashboard = () => {
         }
       }
     }
-    await axiosFetch(configObj)
-    buildPortfolio(response, plotData)
+    await axiosFetch(configObj) // look to response
   }
 
   return (
@@ -101,11 +97,9 @@ export const Dashboard = () => {
           <button className="queryData" onClick={(event) => getStockData(event)}>FETCH DATA</button>
         </div>
       </div>
-      <Plots
-        stockBook={stockBook}
-        plotData={plotData}
-        response={response}
-      />
+      {plotData &&
+        <Plots stockBook={stockBook} plotData={plotData} />
+      }
       <div className="infoPannel">
         <p><Link style={{ 'color': 'var(--grey)' }} onClick={(event) => handleLogout(event)}>Log Out</Link></p>
         <p><Link to='/update-profile' style={{ 'color': 'var(--grey)' }} onClick={(event) => handleProfileUpdate(event)}>Update Profile</Link></p>

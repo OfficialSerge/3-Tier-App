@@ -44,7 +44,7 @@ async function getStockData(params) {
       return data
     }
     functions.logger.log('DATABASE HIT')
-    return stockSnap.data()
+    return stockSnap.data().data
 
   } catch (error) {
     functions.logger.log(error)

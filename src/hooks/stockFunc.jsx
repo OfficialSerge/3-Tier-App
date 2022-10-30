@@ -1,23 +1,33 @@
-export const useStockFunc = (stockBook, SP500, annualTargetReturn, annualRFR) => {
-  /**
-   * @param {object} timeseries the JSON response object from making an API call
-   * @param {object} plotData react state variable that will be populated with portfolios
-   * of random weights
-   */
-  function buildPortfolio(timeseries, plotData) {
-    const numStocks = timeseries.length - 1
+import { useMemo } from "react"
 
-    // clear any and all prior history before adding new data
-    for (const [key, data] of Object.entries(stockBook)) {
-      delete stockBook[key]
+export const useStockFunc = (response, annualTargetReturn, annualRFR) => {
+  const [stockBook, plotData] = useMemo(() => {
+    if (!response) return [null, null]
+
+    const dataForPlot = [], dataForBook = []
+    
+    // we FIRST need to grab information on the market (S&P),
+    // this will serve as a basis for which to contrast 
+    // the stocks returned by our API/DB call
+    const SPX = response.filter(stock => stock.meta.symbol === "SPX")[0]
+    const marketDailyLogs = dailyLogReturns(SPX)
+
+    // count of number of stocks in our response object,
+    // this will be one less than total b.c SPX is an
+    // index for the S&P which is used as market data
+    const numStocks = response.length - 1
+
+    // we grab discriptive statistic on a per stock basis and the market
+    for (const stock of response) {
+      const stats = getDescriptiveStats(stock, marketDailyLogs)
+      dataForBook.push(stats)
     }
-
-    // calculate descriptive statistics on a per stock basis
-    getDescriptiveStats(timeseries)
 
     // sumulate 1000 randomly weighted portfolios
     for (let i = 0; i < 1000; i++) {
-      plotData[i] = {}
+      const data = {}
+
+      // Generate random weights for our simulated portfolio
       const weights = Array.from({ length: numStocks }, () => Math.random())
       const totalWeight = weights.reduce((a, b) => a + b)
 
@@ -25,23 +35,29 @@ export const useStockFunc = (stockBook, SP500, annualTargetReturn, annualRFR) =>
         weights[i] = weight / totalWeight
       })
 
-      plotData[i]['weights'] = {}
-      Object.keys(stockBook).map((key, j) => {
-        plotData[i]['weights'][key] = weights[j]
+      data['weights'] = {}
+      dataForBook.slice(1).forEach((key, i) => {
+        data['weights'][key.symbol] = weights[i]
       })
 
-      const [annualSTD, downVol, upVar, downVar, annualWeightedRet] = simulateWeights(weights)
+      const [annualSTD, downVol, upVar, downVar, annualWeightedRet] = simulateWeights(weights, dataForBook, marketDailyLogs)
 
-      plotData[i]['upSideVarPercent'] = upVar / (upVar + downVar) * 100
-      plotData[i]['downSideVarPercent'] = downVar / (upVar + downVar) * 100
-      plotData[i]['sharpeRatio'] = (annualWeightedRet - annualRFR) / annualSTD
-      plotData[i]['sortinoRatio'] = (annualWeightedRet - annualTargetReturn) / downVol
-      plotData[i]['volatility'] = annualSTD
-      plotData[i]['downSideVolatility'] = downVol
-      plotData[i]['annualReturn'] = annualWeightedRet
-      plotData[i]['volatilitySkewness'] = upVar / downVar
+      data['upSideVarPercent'] = upVar / (upVar + downVar) * 100
+      data['downSideVarPercent'] = downVar / (upVar + downVar) * 100
+      data['sharpeRatio'] = (annualWeightedRet - annualRFR) / annualSTD
+      data['sortinoRatio'] = (annualWeightedRet - annualTargetReturn) / downVol
+      data['volatility'] = annualSTD
+      data['downSideVolatility'] = downVol
+      data['annualReturn'] = annualWeightedRet
+      data['volatilitySkewness'] = upVar / downVar
+
+      // add iteration to our array
+      dataForPlot.push(data)
     }
-  }
+
+    return [dataForBook, dataForPlot]
+
+  }, [response])
 
   /**
    * @param {object} stock json object representing stock information and daily closing prices
@@ -70,48 +86,56 @@ export const useStockFunc = (stockBook, SP500, annualTargetReturn, annualRFR) =>
   function historicReturns(stock) {
     const final = stock.values[0]['close']
     const initial = stock.values[stock.values.length - 1]['close']
-    const compoundAnnual = stock.values.length / 252
 
-    return (final / initial) ** (252 / stock.values.length) - 1
+    return (final / initial) - 1
   }
 
   /**
-   * @param {array<float>} arr array representing the daily log returns for given timeseries
-   * @param {array<float>} sp500 the log returns of the S&P 500 to be compared to arr
-   * @return {float} the beta of the given stock when contrasted to the S&P 500
+   * @param {array<float>} stockDailyLogs the annual daily log returns for a given stock
+   * @param {array<float>} marketDailyLogs the annual daily log returns for market
+   * @return {float} the beta of the given stock against the S&P
    */
-  function beta(arr, sp500) {
-    const ave1 = mean(arr), ave2 = mean(sp500)
+  function beta(stockDailyLogs, marketDailyLogs) {
+    const mAve = mean(marketDailyLogs)
+    const sAve = mean(stockDailyLogs)
 
     let sum = 0, sumMarket = 0
 
-    for (const i in arr) {
-      sum += (arr[i] - ave1) * (sp500[i] - ave2)
-      sumMarket += (sp500[i] - ave2) ** 2
+    for (const day in marketDailyLogs) {
+      sum += (stockDailyLogs[day] - sAve) * (marketDailyLogs[day] - mAve)
+      sumMarket += (marketDailyLogs[day] - mAve) ** 2
     }
     return sum / sumMarket
   }
 
   /**
- * @param {array<float>} arr array representing the daily log returns for given timeseries
- * @param {array<float>} sp500 the log returns of the S&P 500 to be compared to arr
- * @return {float} the downside beta of the given stock when contrasted to the S&P 500
- */
-  function downSideBeta(arr, sp500) {
-    const downCov = downSideCov(arr, sp500)
-    const downVar = downSideVar(sp500, sp500)
+   * @param {array<float>} stockDailyLogs the annual daily log returns for a given stock
+   * @param {array<float>} marketDailyLogs the annual daily log returns for market
+   * @return {float} the downside beta of the given stock when contrasted to the S&P 500
+   */
+  function downSideBeta(stockDailyLogs, marketDailyLogs) {
+    const mAve = mean(marketDailyLogs)
+    const sAve = mean(stockDailyLogs)
 
-    return downCov / downVar
+    let sum = 0, sumMarket = 0
+
+    for (const day in marketDailyLogs) {
+      if (marketDailyLogs[day] > mAve) continue
+
+      sum += (stockDailyLogs[day] - sAve) * (marketDailyLogs[day] - mAve)
+      sumMarket += (marketDailyLogs[day] - mAve) ** 2
+    }
+    return sum / sumMarket
   }
 
   /**
-   * @param {array<float>} arr an array consisting of daily log returns
+   * @param {array<float>} stockDailyLogs the annual daily log returns for a given stock
    * @return {float} the average daily return for given timeseries
    */
-  function mean(arr) {
+  function mean(stockDailyLogs) {
     let sum = 0, length = 0
 
-    for (const daily of arr) {
+    for (const daily of stockDailyLogs) {
       sum += daily
       length++
     }
@@ -120,133 +144,92 @@ export const useStockFunc = (stockBook, SP500, annualTargetReturn, annualRFR) =>
   }
 
   /**
-   * @param {array<float>} arr an array consisting of daily log returns
-   * @param {float} ave the mean of log returns for given timeseries arr
+   * @param {array<float>} stockDailyLogs the annual daily log returns for a given stock
    * @return {float} the daily, stardard deviation for given timeseries
    */
-  function standardDev(arr, ave) {
+  function standardDev(stockDailyLogs) {
+    const sAve = mean(stockDailyLogs)
     let sum = 0, length = 0
 
-    for (const daily of arr) {
-      sum += (daily - ave) ** 2
+    for (const daily of stockDailyLogs) {
+      sum += (daily - sAve) ** 2
       length++
     }
 
-    return ((sum / (length - 1)) ** 0.5)
+    return (sum / (length - 1)) ** 0.5
   }
 
   /**
-  * @param {array<float>} arr an array consisting of daily log returns
-  * @param {array<float>} sp500 an array consisting of daily log returns
-  * @return {float} the daily, stardard deviation for given timeseries
-  */
-  function downSideCov(arr, sp500) {
-    const ave = mean(arr), marketAve = mean(sp500)
-    let sum = 0, length = 0
-
-    for (const i in arr) {
-      // only for negative values
-      if (sp500[i] > marketAve) continue
-
-      sum += (arr[i] - ave) * (sp500[i] - marketAve)
-      length++
-    }
-
-    return (sum / (length - 1))
-  }
-
-  /**
-   * @param {array<float>} arr an array consisting of daily log returns
-   * @param {array<float>} sp500 an array consisting of daily log returns
-   * @return {float} the downside variance of arr 
+   * @param {object} stock json object representing one of our stocks
+   * @param {object} marketDailyLogs the annual daily log returns of our market
+   * @return {object} a JSON object containing descriptive statistics for the given stock
+   * will compute descriptive statistics like standard deviation,
+   * beta, expected return, skew, and log returns
    */
-  function downSideVar(arr, sp500) {
-    const ave = mean(arr), marketAve = mean(sp500)
-    let sum = 0, length = 0
+  function getDescriptiveStats(stock, marketDailyLogs) {
+    const data = {}
 
-    for (const i in arr) {
-      // only for negative values
-      if (sp500[i] > marketAve) continue
+    // we will need to collect the daily log returns 
+    // of our stock, this will serve as a basis for
+    // many subsequent calculations
+    const stockDailyLogs = dailyLogReturns(stock)
 
-      sum += (arr[i] - ave) ** 2
-      length++
-    }
+    // extrapolate key measures using data
+    const histRet = historicReturns(stock)
+    const stDev = standardDev(stockDailyLogs) * (252 ** 0.5)
+    const bta = beta(stockDailyLogs, marketDailyLogs)
+    const downbta = downSideBeta(stockDailyLogs, marketDailyLogs)
 
-    return (sum / (length - 1))
+    // tally the data for each stock in our response
+    data['symbol'] = stock.meta.symbol
+    data['dailyLogReturns'] = stockDailyLogs
+    data['annualHistRet'] = histRet
+    data['annualStDev'] = stDev
+    data['annualBeta'] = bta
+    data['annualDBeta'] = downbta
+    data['expAnnualRetCAPM'] = annualRFR + bta * (histRet - annualRFR)
+    data['expAnnualRetDCAPM'] = annualRFR + downbta * (histRet - annualRFR)
+
+    return data
   }
 
   /**
-   * @param {object} timeseries the JSON response from our API call
-   * will compute, on a per stock basis, descriptive statistics like
-   * standard deviation, beta, expected return, skew, and log returns
-   */
-  function getDescriptiveStats(timeseries) {
-    timeseries.map((stock, i) => {
-      // get daily log returns for a stock
-      const logValues = dailyLogReturns(stock)
-
-      // tally the data for each stock in our response
-      stockBook[stock.meta.symbol] = {}
-      stockBook[stock.meta.symbol]['dailyLogReturns'] = logValues
-
-      // extrapolate key measures using data
-      const his = historicReturns(stock)
-      const ave = mean(logValues)
-      const std = standardDev(logValues, ave) * (252 ** 0.5)
-      const bta = beta(logValues, stockBook['SPX']['dailyLogReturns'])
-      const downbta = downSideBeta(logValues, stockBook['SPX']['dailyLogReturns'])
-
-      // tally the metrics for each stock
-      stockBook[stock.meta.symbol]['annualHistRet'] = his
-      stockBook[stock.meta.symbol]['annualStDev'] = std
-      stockBook[stock.meta.symbol]['annualBeta'] = bta
-      stockBook[stock.meta.symbol]['annualDBeta'] = downbta
-      stockBook[stock.meta.symbol]['expAnnualRetCAPM'] = annualRFR + bta * (stockBook['SPX']['annualHistRet'] - annualRFR)
-      stockBook[stock.meta.symbol]['expAnnualRetDCAPM'] = annualRFR + downbta * (stockBook['SPX']['annualHistRet'] - annualRFR)
-    })
-
-    // transfer ownership of S&P500 data to SP500 state variable
-    SP500['SPX'] = stockBook['SPX']
-    delete stockBook.SPX
-  }
-
-  /**
-   * @param {array<float>} weights a set of random weights to be used to simulate portfolio
+   * @param {array<float>} weights an array of weights to construct a portfolio from
+   * @param {array<object>} dataForBook an array of per stock descriptive statistic
+   * @param {array<float>} marketDailyLogs the annual daily log returns for market
    * @return {array<float>} [portfolio standard deviation, downside volatility, upside variance, downside variance, annual weighted return]
    * will take the given weights and simulate a single portfolio
    */
-  function simulateWeights(weights) {
-    let day = 0, annualWeightedReturn = 0
-    const dailies = [], belowTargetDays = [], upsideDays = [], downsideDays = []
+  function simulateWeights(weights, dataForBook, marketDailyLogs) {
+    let annualWeightedReturn = 0
     const dailyTargetReturn = annualTargetReturn / 252
+    const portDailyLogs = [], belowTargetDays = [], upsideDays = [], downsideDays = []
 
     // do sum product using our weights array and the 
     // daily log returns per stock in our portfolio
     // to get total daily log returns for portfolio
-    while (day < SP500.SPX.dailyLogReturns.length) {
+    for (const day in marketDailyLogs) {
       let i = 0, sum = 0
 
-      for (const [stock, data] of Object.entries(stockBook)) {
-        const daily = data.dailyLogReturns[day], weight = weights[i++]
-        sum += daily * weight
-      }
+      dataForBook.slice(1).forEach((stock) => {
+        sum += stock.dailyLogReturns[day] * weights[i++]
+      })
 
       annualWeightedReturn += sum
-      dailies[day] = sum
-      day++
+      portDailyLogs[day] = sum
     }
 
     // now get ave daily return and annual standard deviation
-    const histDailyReturn = mean(dailies)
-    const histAnnualSTD = standardDev(dailies, histDailyReturn) * (252 ** 0.5)
+    const histDailyReturn = mean(portDailyLogs)
+    const histAnnualSTD = standardDev(portDailyLogs) * (252 ** 0.5)
 
-    day = 0
-    let belowTargetSum = 0, downsideSum = 0, upsideSum = 0
     // belowTargetDays will use our provided target return
     // downsideDays will use the calculated daily returns
     // upsideDays will use the calculated daily returns
-    while (day < SP500.SPX.dailyLogReturns.length) {
-      const daily = dailies[day]
+    let belowTargetSum = 0, downsideSum = 0, upsideSum = 0
+
+    for (const day in marketDailyLogs) {
+      const daily = portDailyLogs[day]
 
       // belowTargetDays is used to calculate the downside volatility
       // based on our provided level of risk adversity
@@ -260,25 +243,23 @@ export const useStockFunc = (stockBook, SP500, annualTargetReturn, annualRFR) =>
 
       upsideDays[day] = Math.max(daily - histDailyReturn, 0)
       upsideSum += upsideDays[day] ** 2
-      day++
     }
 
-    const historicDownsideVol = ((belowTargetSum / (SP500.SPX.dailyLogReturns.length - 1)) ** 0.5) * (252 ** 0.5)
-    const historicUpsideVar = (upsideSum / (SP500.SPX.dailyLogReturns.length - 1))
-    const historicDownsideVar = (downsideSum / (SP500.SPX.dailyLogReturns.length - 1))
+    const historicDownsideVol = ((belowTargetSum / (marketDailyLogs.length - 1)) ** 0.5) * (252 ** 0.5)
+    const historicUpsideVar = (upsideSum / (marketDailyLogs.length - 1))
+    const historicDownsideVar = (downsideSum / (marketDailyLogs.length - 1))
 
     return [histAnnualSTD, historicDownsideVol, historicDownsideVar, historicUpsideVar, annualWeightedReturn]
   }
 
   return [
-    buildPortfolio,
+    stockBook,
+    plotData,
     dailyLogReturns,
     historicReturns,
     beta,
     downSideBeta,
     mean,
-    standardDev,
-    downSideVar,
-    downSideCov
+    standardDev
   ]
 }
