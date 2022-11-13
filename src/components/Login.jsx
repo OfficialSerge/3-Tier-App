@@ -5,20 +5,24 @@ import { useAuth } from '../contexts/AuthContext'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
-export const Login = () => {
+export const Login = ({ formValid, setFormValid, blueToRed, redToBlue }) => {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const emailRef = useRef()
   const passRef = useRef()
 
   const { login } = useAuth()
-  
+
   const navigate = useNavigate()
 
   async function handleSubmit(e) {
     e.preventDefault()
 
     if (!emailRef.current.value || !passRef.current.value) {
+      if (formValid) {
+        setFormValid(false)
+        await blueToRed()
+      }
       return setError('MISSING FIELD')
     }
 
@@ -26,11 +30,21 @@ export const Login = () => {
       setError('')
       setLoading(true)
       await login(emailRef.current.value, passRef.current.value)
+      
+      if (!formValid) {
+        setFormValid(true)
+        await redToBlue()
+      }
+
       navigate('/')
 
     } catch (err) {
       setError(err)
-      console.log(error)
+
+      if (formValid) {
+        setFormValid(false)
+        await blueToRed()
+      }
 
     } finally {
       setLoading(false)

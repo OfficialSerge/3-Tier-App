@@ -5,15 +5,15 @@ import { useAuth } from '../contexts/AuthContext'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
-export const Signup = () => {
+export const Signup = ({ formValid, setFormValid, blueToRed, redToBlue }) => {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const emailRef = useRef()
   const passRef = useRef()
   const confPassRef = useRef()
-  
+
   const { signUpFireBase } = useAuth()
-  
+
   const navigate = useNavigate()
 
   async function handleSubmit(e) {
@@ -21,10 +21,18 @@ export const Signup = () => {
 
     // handle signup verfification
     if (passRef.current.value !== confPassRef.current.value) {
+      if (formValid) {
+        setFormValid(false)
+        await blueToRed()
+      }
       return setError('PASSWORDS DO NOT MATCH')
     }
 
     if (!emailRef.current.value || !passRef.current.value || !confPassRef.current.value) {
+      if (formValid) {
+        setFormValid(false)
+        await blueToRed()
+      }
       return setError('MISSING FIELD')
     }
 
@@ -32,11 +40,21 @@ export const Signup = () => {
       setError('')
       setLoading(true)
       await signUpFireBase(emailRef.current.value, passRef.current.value)
+
+      if (!formValid) {
+        setFormValid(true)
+        await redToBlue()
+      }
+
       navigate('/')
 
     } catch (err) {
       setError('Account creating failed')
-      console.log(err)
+
+      if (formValid) {
+        setFormValid(false)
+        await blueToRed()
+      }
 
     } finally {
       setLoading(false)
@@ -59,7 +77,7 @@ export const Signup = () => {
           </div>
           <button disabled={loading}>Create Account</button>
         </form>
-        <p>Already have an account? <Link to='/login' style={{'color':'var(--grey)'}}>Log In</Link></p>
+        <p>Already have an account? <Link to='/login' style={{ 'color': 'var(--grey)' }}>Log In</Link></p>
       </div>
     </>
   )
